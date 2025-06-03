@@ -99,42 +99,61 @@ bool IsTensorShapeSupported(const NodeArg& node_arg, const std::string& parent_n
   return true;
 }
 
-bool IsInputRankSupportedByWebNNOp(const Node& node, const emscripten::val& wnn_limits, const logging::Logger& logger) {
-  auto it = op_inputs_map.find(node.OpType());
+bool IsInputRankSupportedByOp(const Node& node, const emscripten::val& wnn_limits, const logging::Logger& logger) {
+  const std::string_view op_type = node.OpType();
+
+  auto it = op_inputs_map.find(op_type);
   if (it == op_inputs_map.end()) {
-    LOGS(logger, VERBOSE) << "[" << node.OpType() << "] op type is not found in op inputs map.";
+    LOGS(logger, VERBOSE) << "Operator type: [" << op_type << "] is not found in op inputs map.";
     return false;
   }
 
   for (const auto& input : it->second.inputs) {
+    std::vector<int64_t> input_shape;
+    const std::string_view webnn_op_type = it->second.opType;
+
     if (static_cast<size_t>(input.index) >= node.InputDefs().size() || node.InputDefs()[input.index] == nullptr) {
-      LOGS(logger, VERBOSE)
-          << "[" << node.OpType() << "] webnn input: " << input.name << " input index " << input.index << " does not exist in node.InputDefs().";
+      LOGS(logger, VERBOSE) << "Operator type: [" << op_type
+                            << "], input index: [" << input.index
+                            << "], corresponding webnn op type: " << webnn_op_type
+                            << ", webnn input name " << input.name
+                            << "] is not found.";
       return false;
     }
 
-    const auto* shape_proto = node.InputDefs()[input.index]->Shape();
-    if (!shape_proto) {
-      LOGS(logger, VERBOSE) << "[" << node.OpType() << "] input: " << input.name << " has no shape.";
+    if (!GetShape(*node.InputDefs()[input.index], input_shape, logger)) {
       return false;
     }
 
-    const auto input_dim_size = shape_proto->dim_size();
-    if (!wnn_limits[std::string(it->second.opType)].hasOwnProperty(std::string(input.name).c_str())) {
-      LOGS(logger, VERBOSE) << node.OpType() << ": input name " << input.name << " not found in wnn_limits for opType " << it->second.opType;
+    const auto input_dim_size = input_shape->dim_size();
+    if (!wnn_limits[std::string(webnn_op_type)].hasOwnProperty(std::string(input.name).c_str())) {
+      LOGS(logger, VERBOSE) << "Operator type: [" << op_type
+                            << "], input index: [" << input.index
+                            << "], corresponding webnn op type: " << webnn_op_type
+                            << ", webnn input name " << input.name
+                            << " is not found in wnn_limits.";
       return false;
     }
 
-    const auto& input_limits = wnn_limits[std::string(it->second.opType)][std::string(input.name)];
+    const auto& input_limits = wnn_limits[std::string(webnn_op_type)][std::string(input.name)];
     if (input_limits["rankRange"].isUndefined()) {
-      LOGS(logger, VERBOSE) << "[" << node.OpType() << "] rankRange is not defined for input [" << input.name << "]";
+      LOGS(logger, VERBOSE) << "Operator type: [" << op_type
+                            << "], input index: [" << input.index
+                            << "], corresponding webnn op type: " << webnn_op_type
+                            << ", webnn input name " << input.name
+                            << "'s rankRange is not defined.";
       return false;
     }
 
     int min_rank = input_limits["rankRange"]["min"].as<int>();
     int max_rank = input_limits["rankRange"]["max"].as<int>();
     if (input_dim_size < min_rank || input_dim_size > max_rank) {
-      LOGS(logger, VERBOSE) << "[" << node.OpType() << "] input rank " << input_dim_size << " is not in supported range[" << min_rank << ", " << max_rank << "] ";
+      LOGS(logger, VERBOSE) << "Operator type: [" << op_type
+                            << "], input index: [" << input.index
+                            << "], corresponding webnn op type: " << webnn_op_type
+                            << ", webnn input name: " << input.name
+                            << ", input size " << input_dim_size
+                            << " is not in supported range [" << min_rank << ", " << max_rank << "] ";
       return false;
     }
   }
