@@ -99,6 +99,22 @@ bool IsTensorShapeSupported(const NodeArg& node_arg, const std::string& parent_n
   return true;
 }
 
+/**
+ * Checks if all input tensor ranks (dimension counts) of the given node are supported by WebNN specifications.
+ *
+ * This function:
+ * 1. Looks up the operator type in a predefined mapping to WebNN equivalent
+ * 2. Verifies each input tensor exists at the expected position
+ * 3. Retrieves tensor shape information
+ * 4. Compares actual rank against WebNN's allowed rank range in support litims:
+ *    - min_rank: Minimum supported dimensions
+ *    - max_rank: Maximum supported dimensions
+ * 5. Returns false immediately on any validation failure
+ *
+ * @param node The ONNX node to validate
+ * @param wnn_limits JavaScript object containing WebNN rank constraints (via Emscripten val)
+ * @return true if all input ranks are supported, false otherwise
+ */
 bool IsInputRankSupportedByOp(const Node& node, const emscripten::val& wnn_limits, const logging::Logger& logger) {
   const std::string_view op_type = node.OpType();
 
