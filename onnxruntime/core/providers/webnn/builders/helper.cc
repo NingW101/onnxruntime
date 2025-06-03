@@ -99,6 +99,48 @@ bool IsTensorShapeSupported(const NodeArg& node_arg, const std::string& parent_n
   return true;
 }
 
+bool IsInputRankSupportedByWebNNOp(const Node& node, const emscripten::val& wnn_limits, const logging::Logger& logger) {
+  auto it = op_inputs_map.find(node.OpType());
+  if (it == op_inputs_map.end()) {
+    LOGS(logger, VERBOSE) << "[" << node.OpType() << "] op type is not found in op inputs map.";
+    return false;
+  }
+
+  for (const auto& input : it->second.inputs) {
+    if (static_cast<size_t>(input.index) >= node.InputDefs().size() || node.InputDefs()[input.index] == nullptr) {
+      LOGS(logger, VERBOSE)
+          << "[" << node.OpType() << "] webnn input: " << input.name << " input index " << input.index << " does not exist in node.InputDefs().";
+      return false;
+    }
+
+    const auto* shape_proto = node.InputDefs()[input.index]->Shape();
+    if (!shape_proto) {
+      LOGS(logger, VERBOSE) << "[" << node.OpType() << "] input: " << input.name << " has no shape.";
+      return false;
+    }
+
+    const auto input_dim_size = shape_proto->dim_size();
+    if (!wnn_limits[std::string(it->second.opType)].hasOwnProperty(std::string(input.name).c_str())) {
+      LOGS(logger, VERBOSE) << node.OpType() << ": input name " << input.name << " not found in wnn_limits for opType " << it->second.opType;
+      return false;
+    }
+
+    const auto& input_limits = wnn_limits[std::string(it->second.opType)][std::string(input.name)];
+    if (input_limits["rankRange"].isUndefined()) {
+      LOGS(logger, VERBOSE) << "[" << node.OpType() << "] rankRange is not defined for input [" << input.name << "]";
+      return false;
+    }
+
+    int min_rank = input_limits["rankRange"]["min"].as<int>();
+    int max_rank = input_limits["rankRange"]["max"].as<int>();
+    if (input_dim_size < min_rank || input_dim_size > max_rank) {
+      LOGS(logger, VERBOSE) << "[" << node.OpType() << "] input rank " << input_dim_size << " is not in supported range[" << min_rank << ", " << max_rank << "] ";
+      return false;
+    }
+  }
+  return true;
+}
+
 std::unordered_set<const Node*> GetSupportedNodes(const GraphViewer& graph_viewer,
                                                   const emscripten::val& wnn_builder,
                                                   const WebnnDeviceType device_type,
