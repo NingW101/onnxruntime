@@ -141,7 +141,6 @@ bool IsInputRankSupportedByOp(const Node& node, const emscripten::val& wnn_limit
       return false;
     }
 
-    const auto input_dim_size = input_shape->dim_size();
     if (!wnn_limits[std::string(webnn_op_type)].hasOwnProperty(std::string(input.name).c_str())) {
       LOGS(logger, VERBOSE) << "Operator type: [" << op_type
                             << "], input index: [" << input.index
@@ -161,15 +160,17 @@ bool IsInputRankSupportedByOp(const Node& node, const emscripten::val& wnn_limit
       return false;
     }
 
+    int input_dim_size = static_cast<int>(input_shape.size());
     int min_rank = input_limits["rankRange"]["min"].as<int>();
     int max_rank = input_limits["rankRange"]["max"].as<int>();
+
     if (input_dim_size < min_rank || input_dim_size > max_rank) {
       LOGS(logger, VERBOSE) << "Operator type: [" << op_type
                             << "], input index: [" << input.index
                             << "], corresponding webnn op type: " << webnn_op_type
                             << ", webnn input name: " << input.name
                             << ", input size " << input_dim_size
-                            << " is not in supported range [" << min_rank << ", " << max_rank << "] ";
+                            << " is not in supported range [" << min_rank << ", " << max_rank << "]";
       return false;
     }
   }
