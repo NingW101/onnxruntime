@@ -99,54 +99,40 @@ bool IsTensorShapeSupported(const NodeArg& node_arg, const std::string& parent_n
   return true;
 }
 
-/**
- * Checks if all input tensor ranks (dimension counts) of the given node are supported by WebNN specifications.
- *
- * This function:
- * 1. Looks up the operator type in a predefined mapping to WebNN equivalent
- * 2. Verifies each input tensor exists at the expected position
- * 3. Retrieves tensor shape information
- * 4. Compares actual rank against WebNN's allowed rank range in support litims:
- *    - min_rank: Minimum supported dimensions
- *    - max_rank: Maximum supported dimensions
- * 5. Returns false immediately on any validation failure
- *
- * @param node The ONNX node to validate
- * @param wnn_limits JavaScript object containing WebNN rank constraints (via Emscripten val)
- * @return true if all input ranks are supported, false otherwise
- */
+// Check if all input tensor ranks of the given node are supported by WebNN.
 bool IsInputRankSupportedByOp(const Node& node, const emscripten::val& wnn_limits, const logging::Logger& logger) {
   const std::string_view op_type = node.OpType();
 
   auto it = op_inputs_map.find(op_type);
   if (it == op_inputs_map.end()) {
-    LOGS(logger, VERBOSE) << "Operator type: [" << op_type << "] is not found in op inputs map.";
+    LOGS(logger, VERBOSE) << "Operator type: [" << op_type << "] is not found in the op inputs map.";
     return false;
   }
 
   for (const auto& input : it->second.inputs) {
-    std::vector<int64_t> input_shape;
     const std::string_view webnn_op_type = it->second.opType;
 
     if (static_cast<size_t>(input.index) >= node.InputDefs().size() || node.InputDefs()[input.index] == nullptr) {
       LOGS(logger, VERBOSE) << "Operator type: [" << op_type
                             << "], input index: [" << input.index
-                            << "], corresponding webnn op type: " << webnn_op_type
-                            << ", webnn input name " << input.name
+                            << "], corresponding WebNN op type: " << webnn_op_type
+                            << ", WebNN input name " << input.name
                             << "] is not found.";
       return false;
     }
 
+    std::vector<int64_t> input_shape;
     if (!GetShape(*node.InputDefs()[input.index], input_shape, logger)) {
       return false;
     }
 
-    if (!wnn_limits[std::string(webnn_op_type)].hasOwnProperty(std::string(input.name).c_str())) {
+    if (wnn_limits[std::string(webnn_op_type)].isUndefined() ||
+        wnn_limits[std::string(webnn_op_type)][std::string(input.name)].isUndefined()) {
       LOGS(logger, VERBOSE) << "Operator type: [" << op_type
                             << "], input index: [" << input.index
-                            << "], corresponding webnn op type: " << webnn_op_type
-                            << ", webnn input name " << input.name
-                            << " is not found in wnn_limits.";
+                            << "], corresponding WebNN op type: " << webnn_op_type
+                            << ", WebNN input name " << input.name
+                            << " is not defined in wnn_limits.";
       return false;
     }
 
@@ -154,8 +140,8 @@ bool IsInputRankSupportedByOp(const Node& node, const emscripten::val& wnn_limit
     if (input_limits["rankRange"].isUndefined()) {
       LOGS(logger, VERBOSE) << "Operator type: [" << op_type
                             << "], input index: [" << input.index
-                            << "], corresponding webnn op type: " << webnn_op_type
-                            << ", webnn input name " << input.name
+                            << "], corresponding WebNN op type: " << webnn_op_type
+                            << ", WebNN input name " << input.name
                             << "'s rankRange is not defined.";
       return false;
     }
@@ -167,8 +153,8 @@ bool IsInputRankSupportedByOp(const Node& node, const emscripten::val& wnn_limit
     if (input_dim_size < min_rank || input_dim_size > max_rank) {
       LOGS(logger, VERBOSE) << "Operator type: [" << op_type
                             << "], input index: [" << input.index
-                            << "], corresponding webnn op type: " << webnn_op_type
-                            << ", webnn input name: " << input.name
+                            << "], corresponding WebNN op type: " << webnn_op_type
+                            << ", WebNN input name: " << input.name
                             << ", input size " << input_dim_size
                             << " is not in supported range [" << min_rank << ", " << max_rank << "]";
       return false;
